@@ -87,7 +87,7 @@ jobs:
           script: |
             cd docker-compose
             git config credential.helper store
-            git pull https://${{ secrets.GIT_USER }}:${{ secrets.GIT_PASS }}@github.com/iot-platform/docker-compose.git main
+            git pull https://${{ secrets.GIT_USER }}:${{ secrets.GIT_PASS }}@github.com/GN-TA/docker-compose.git main
             docker pull $DOCKER_IMAGE
             docker compose down
             docker compose up -d
