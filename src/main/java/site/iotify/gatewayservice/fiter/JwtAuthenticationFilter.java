@@ -9,6 +9,7 @@ import lombok.Setter;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import site.iotify.gatewayservice.exception.TokenException;
 
@@ -20,6 +21,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.List;
 
+@Component
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
 
     @AllArgsConstructor
@@ -28,6 +30,10 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     @Setter
     public static class Config {
         private String secretKey;
+    }
+
+    public JwtAuthenticationFilter() {
+        super(Config.class);
     }
 
     @Override
