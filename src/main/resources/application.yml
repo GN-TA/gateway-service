@@ -1,0 +1,15 @@
+server:
+  shutdown: graceful
+  port: 8080
+
+spring:
+  application:
+    name: gatewayservice
+  profiles:
+    active: dev
+
+logging:
+  level:
+    org:
+      springframework: DEBUG
+      reactor.netty.http.client: DEBUG
