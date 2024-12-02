@@ -1,0 +1,24 @@
+jwt:
+  secret:
+    key: asdf
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          predicates:
+            - Path=/user/**
+          uri: http://user-service:8081
+          filters:
+            - RewritePath=/user/(?<segment>.*), /$\{segment}
+            - name: JwtAuthenticationFilter
+              args:
+                secretKey: ${jwt.secret.key}
+
+        - id: token-service
+          predicates:
+            - Path=/token/**
+          uri: http://token-service:8082
+          filters:
+            - RewritePath=/token/(?<segment>.*), /$\{segment}
