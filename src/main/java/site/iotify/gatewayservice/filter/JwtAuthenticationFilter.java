@@ -1,4 +1,4 @@
-package site.iotify.gatewayservice.fiter;
+package site.iotify.gatewayservice.filter;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

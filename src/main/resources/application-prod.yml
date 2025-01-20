@@ -16,9 +16,23 @@ spring:
               args:
                 secretKey: ${jwt.secret.key}
 
+        - id: user-service-filter-excluded
+          predicates:
+            - Path=/users/**
+          uri: http://localhost:8092
+          filters:
+            - RewritePath=/users/(?<segment>.*), /${segment}
+
         - id: token-service
           predicates:
             - Path=/token/**
           uri: http://token-service:8091
           filters:
             - RewritePath=/token/(?<segment>.*), /$\{segment}
+
+        - id: device-service
+          predicates:
+            - Path=/device/**
+          uri: http://localhost:8093
+          filters:
+            - RewritePath=/device/(?<segment>.*), /$\{segment}
