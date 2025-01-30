@@ -53,29 +53,30 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         return ((exchange, chain) -> {
             try {
                 ServerHttpRequest request = exchange.getRequest();
-                List<String> auths = request.getHeaders().get(HttpHeaders.AUTHORIZATION);
-                if (auths == null) {
-                    throw new TokenException();
+
+                String accessToken = null;
+                if (request.getCookies().containsKey("AT")) {
+                    accessToken = Objects.requireNonNull(request.getCookies().getFirst("AT")).getValue();
                 }
                 String refreshToken = null;
-                if (request.getCookies().containsKey("refreshToken")) {
-                    refreshToken = Objects.requireNonNull(request.getCookies().getFirst("refreshToken")).getValue();
+                if (request.getCookies().containsKey("RT")) {
+                    refreshToken = Objects.requireNonNull(request.getCookies().getFirst("RT")).getValue();
                 }
-                String token = auths.get(0);
-                Claims claims = getJwtClaim(secret, token);
+                Claims claims = getJwtClaim(secret, accessToken);
+                System.out.println("이건 ?");
                 boolean isExpired = claims.getExpiration().compareTo(Timestamp.valueOf(LocalDateTime.now())) <= 0;
 
                 if (isExpired) {
-                    Map<String, String> tokenMap = requestNewToken(config.getTokenServiceUrl(), token, refreshToken);
-                    Claims newClaims = getJwtClaim(secret, tokenMap.get("accessToken"));
+                    Map<String, String> tokenMap = requestNewToken(config.getTokenServiceUrl(), accessToken, refreshToken);
+                    Claims newClaims = getJwtClaim(secret, tokenMap.get("AT"));
 
                     ServerWebExchange serverWebExchange = exchange.mutate()
                             .request(r -> r.header("X-USER-ID", newClaims.getSubject())
-                                    .header(HttpHeaders.AUTHORIZATION, tokenMap.get("accessToken"))
+                                    .header(HttpHeaders.AUTHORIZATION, tokenMap.get("AT"))
                                     .build())
                             .build();
 
-                    serverWebExchange.getResponse().addCookie(ResponseCookie.from("refreshToken", tokenMap.get("refreshToken"))
+                    serverWebExchange.getResponse().addCookie(ResponseCookie.from("RT", tokenMap.get("RT"))
                             .path("/")
                             .httpOnly(true)
                             .build());
@@ -99,7 +100,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 .uri(tokenServiceUrl + "/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Authorization", "bearer " + token)
-                .cookie("refreshToken", refreshToken)
+                .cookie("RT", refreshToken)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {
                 })
@@ -114,12 +115,11 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     private Claims getJwtClaim(String secret, String token) throws InvalidKeySpecException, NoSuchAlgorithmException {
         PublicKey publicKey = getPublicKey(secret);
-
-        return Jwts.parser()
-                .verifyWith(publicKey)
+        return Jwts.parserBuilder()
+                .setSigningKey(publicKey)
                 .build()
-                .parseSignedClaims(token)
-                .getPayload();
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
@@ -127,6 +127,9 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s", "");
+
+        System.out.println(">>> s = " + s);
+
         byte[] decodedKey = Base64.getDecoder().decode(s);
 
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
