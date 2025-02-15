@@ -9,7 +9,7 @@ spring:
         - id: user-service
           predicates:
             - Path=/user/**
-          uri: http://user-service:8092
+          uri: http://user-service
           filters:
             - RewritePath=/user/(?<segment>.*), /$\{segment}
             - name: JwtAuthenticationFilter
@@ -19,20 +19,20 @@ spring:
         - id: user-service-filter-excluded
           predicates:
             - Path=/users/**
-          uri: http://user-service:8092
+          uri: http://user-service
           filters:
             - RewritePath=/users/(?<segment>.*), /${segment}
 
         - id: token-service
           predicates:
             - Path=/token/**
-          uri: http://token-service:8091
+          uri: http://token-service
           filters:
             - RewritePath=/token/(?<segment>.*), /$\{segment}
 
         - id: device-service
           predicates:
             - Path=/device/**
-          uri: http://device-service:8093
+          uri: http://device-service
           filters:
             - RewritePath=/device/(?<segment>.*), /$\{segment}
