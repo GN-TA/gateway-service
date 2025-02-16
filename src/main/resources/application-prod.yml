@@ -1,3 +1,7 @@
+server:
+  shutdown: graceful
+  port: 8080
+
 jwt:
   secret:
     key: ${PUBLIC_KEY}
@@ -9,7 +13,7 @@ spring:
         - id: user-service
           predicates:
             - Path=/user/**
-          uri: http://user-service
+          uri: http://user-service:8080
           filters:
             - RewritePath=/user/(?<segment>.*), /$\{segment}
             - name: JwtAuthenticationFilter
@@ -19,20 +23,20 @@ spring:
         - id: user-service-filter-excluded
           predicates:
             - Path=/users/**
-          uri: http://user-service
+          uri: http://user-service:8080
           filters:
             - RewritePath=/users/(?<segment>.*), /${segment}
 
         - id: token-service
           predicates:
             - Path=/token/**
-          uri: http://token-service
+          uri: http://token-service:8080
           filters:
             - RewritePath=/token/(?<segment>.*), /$\{segment}
 
         - id: device-service
           predicates:
             - Path=/device/**
-          uri: http://device-service
+          uri: http://device-service:8080
           filters:
             - RewritePath=/device/(?<segment>.*), /$\{segment}
