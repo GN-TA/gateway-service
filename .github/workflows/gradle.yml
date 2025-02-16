@@ -88,12 +88,15 @@ jobs:
           script: |
             export PUBLIC_KEY=${{ secrets.PUBLIC_KEY }}
             export DOCKER_IMAGE=codethestudent/iot-gateway-service:latest
+            
             cd docker-compose
             git config credential.helper store
             git pull https://${{ secrets.GIT_USER }}:${{ secrets.GIT_PASS }}@github.com/GN-TA/docker-compose.git main
+            
             docker pull $DOCKER_IMAGE
-            docker compose down
-            docker compose up -d
+            
+            docker compose pull gateway-service
+            docker compose up -d gateway-service
 
 
   dependency-submission:
