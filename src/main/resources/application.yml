@@ -1,12 +1,30 @@
 server:
   shutdown: graceful
-  port: 8080
+  port: 8090
 
 spring:
   application:
     name: gatewayservice
   profiles:
     active: dev
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns:
+              - "*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+            allow-credentials:
+              true
+            allowed-headers:
+              - "*"
+            exposed-headers:
+              - "*"
 
 logging:
   level:

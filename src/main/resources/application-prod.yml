@@ -1,6 +1,6 @@
 jwt:
   secret:
-    key: asdf
+    key: ${PUBLIC_KEY}
 
 spring:
   cloud:
@@ -9,16 +9,30 @@ spring:
         - id: user-service
           predicates:
             - Path=/user/**
-          uri: http://user-service:8081
+          uri: http://user-service
           filters:
             - RewritePath=/user/(?<segment>.*), /$\{segment}
             - name: JwtAuthenticationFilter
               args:
                 secretKey: ${jwt.secret.key}
 
+        - id: user-service-filter-excluded
+          predicates:
+            - Path=/users/**
+          uri: http://user-service
+          filters:
+            - RewritePath=/users/(?<segment>.*), /${segment}
+
         - id: token-service
           predicates:
             - Path=/token/**
-          uri: http://token-service:8082
+          uri: http://token-service
           filters:
             - RewritePath=/token/(?<segment>.*), /$\{segment}
+
+        - id: device-service
+          predicates:
+            - Path=/device/**
+          uri: http://device-service
+          filters:
+            - RewritePath=/device/(?<segment>.*), /$\{segment}
