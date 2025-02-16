@@ -62,14 +62,19 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
+      #          docker buildx create --use --name multiarch || docker buildx use multiarch
+      #
+      #          docker buildx build \
+      #            --platform linux/amd64,linux/arm64 \
+      #            -t $DOCKER_IMAGE \
+      #            --push .
       - name: Build and Push Docker Image
         run: |
-          docker buildx create --use --name multiarch || docker buildx use multiarch
-          
+          docker buildx create --use --name singlearch || docker buildx use singlearch
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            -t $DOCKER_IMAGE \
-            --push .
+          --platform linux/amd64 \
+          -t $DOCKER_IMAGE \
+          --push .
 
   deploy:
     needs: build
