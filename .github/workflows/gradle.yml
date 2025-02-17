@@ -73,6 +73,7 @@ jobs:
           docker buildx create --use --name singlearch || docker buildx use singlearch
           docker buildx build \
           --platform linux/amd64 \
+          --no-cache \
           -t $DOCKER_IMAGE \
           --push .
 
@@ -98,10 +99,12 @@ jobs:
             git config credential.helper store
             git pull https://${{ secrets.GIT_USER }}:${{ secrets.GIT_PASS }}@github.com/GN-TA/docker-compose.git main
             
-            docker pull $DOCKER_IMAGE
+            docker stop gateway-service || true
+            docker rm gateway-service || true
             
-            docker compose pull gateway-service
-            docker compose up -d gateway-service
+            docker pull --no-cache $DOCKER_IMAGE
+            
+            docker compose up -d --force-recreate gateway-service
 
 
   dependency-submission:
