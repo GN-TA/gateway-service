@@ -26,8 +26,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          ref: main
+#        with:
+#          ref: main
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -62,14 +62,19 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
+      #          docker buildx create --use --name multiarch || docker buildx use multiarch
+      #
+      #          docker buildx build \
+      #            --platform linux/amd64,linux/arm64 \
+      #            -t $DOCKER_IMAGE \
+      #            --push .
       - name: Build and Push Docker Image
         run: |
-          docker buildx create --use --name multiarch || docker buildx use multiarch
-          
+          docker buildx create --use --name singlearch || docker buildx use singlearch
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            -t $DOCKER_IMAGE \
-            --push .
+          --platform linux/amd64 \
+          -t $DOCKER_IMAGE \
+          --push .
 
   deploy:
     needs: build
@@ -88,12 +93,15 @@ jobs:
           script: |
             export PUBLIC_KEY=${{ secrets.PUBLIC_KEY }}
             export DOCKER_IMAGE=codethestudent/iot-gateway-service:latest
+            
             cd docker-compose
             git config credential.helper store
             git pull https://${{ secrets.GIT_USER }}:${{ secrets.GIT_PASS }}@github.com/GN-TA/docker-compose.git main
+            
             docker pull $DOCKER_IMAGE
-            docker compose down
-            docker compose up -d
+            
+            docker compose pull gateway-service
+            docker compose up -d gateway-service
 
 
   dependency-submission:
