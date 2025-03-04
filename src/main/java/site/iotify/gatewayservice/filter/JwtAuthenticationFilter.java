@@ -134,7 +134,8 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         System.out.println(">>> s = " + s);
 
         byte[] decodedKey = Base64.getDecoder().decode(s);
-        System.out.println(">>> decodedKey = " + decodedKey);
+        System.out.println(">>> decodedKey length = " + decodedKey.length);
+        System.out.println(">>> decodedKey = " + Base64.getEncoder().encodeToString(decodedKey));
 
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA"); // RSA 또는 EC
