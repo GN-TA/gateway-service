@@ -89,6 +89,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     return chain.filter(serverWebExchange);
                 }
             } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
+                e.printStackTrace();
                 throw new TokenException();
             }
         });
