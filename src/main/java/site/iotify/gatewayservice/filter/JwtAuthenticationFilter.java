@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -88,6 +89,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     return chain.filter(serverWebExchange);
                 }
             } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
+                e.printStackTrace();
                 throw new TokenException();
             }
         });
@@ -123,6 +125,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     }
 
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
+        System.out.println(">>> ENV PUBLIC_KEY : "+secretKey);
         String s = secretKey
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
@@ -131,6 +134,8 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         System.out.println(">>> s = " + s);
 
         byte[] decodedKey = Base64.getDecoder().decode(s);
+        System.out.println(">>> decodedKey length = " + decodedKey.length);
+        System.out.println(">>> decodedKey = " + Base64.getEncoder().encodeToString(decodedKey));
 
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA"); // RSA 또는 EC
