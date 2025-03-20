@@ -27,7 +27,7 @@ COPY --from=build /app/build/libs/*SNAPSHOT.jar app.jar
 EXPOSE 8080
 
 # 환경 변수를 런타임 이미지에 설정
-ENV SPRING_PROFILES_ACTIVE=prod
+#ENV SPRING_PROFILES_ACTIVE=prod
 
 # 애플리케이션 실행
-CMD ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
+CMD ["java", "-jar", "app.jar"]

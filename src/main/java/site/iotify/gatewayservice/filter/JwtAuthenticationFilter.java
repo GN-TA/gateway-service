@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -88,6 +89,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     return chain.filter(serverWebExchange);
                 }
             } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
+                e.printStackTrace();
                 throw new TokenException();
             }
         });
@@ -128,7 +130,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s", "");
 
-        System.out.println(">>> s = " + s);
 
         byte[] decodedKey = Base64.getDecoder().decode(s);
 
