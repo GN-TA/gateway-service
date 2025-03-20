@@ -125,17 +125,13 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     }
 
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
-        System.out.println(">>> ENV PUBLIC_KEY : "+secretKey);
         String s = secretKey
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s", "");
 
-        System.out.println(">>> s = " + s);
 
         byte[] decodedKey = Base64.getDecoder().decode(s);
-        System.out.println(">>> decodedKey length = " + decodedKey.length);
-        System.out.println(">>> decodedKey = " + Base64.getEncoder().encodeToString(decodedKey));
 
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA"); // RSA 또는 EC
