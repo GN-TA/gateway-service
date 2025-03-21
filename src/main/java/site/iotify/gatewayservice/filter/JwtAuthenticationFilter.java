@@ -125,6 +125,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     }
 
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
+        System.out.println("------[#] secretKey : " + secretKey);
         String s = secretKey
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
