@@ -1,19 +1,23 @@
 package site.iotify.gatewayservice.filter;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.web.server.Cookie;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
@@ -31,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+@Slf4j
 @Component
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
 
@@ -50,49 +55,87 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     @Override
     public GatewayFilter apply(Config config) {
         String secret = config.getSecretKey();
-
         return ((exchange, chain) -> {
+            ServerHttpRequest request = exchange.getRequest();
+            ServerHttpResponse response = exchange.getResponse();
+
+            String accessToken = extractTokenFromCookie(request, response, "AT");
+            if (accessToken == null) return response.setComplete();
+            String refreshToken = extractTokenFromCookie(request, response, "RT");
+            if (refreshToken == null) return response.setComplete();
+
             try {
-                ServerHttpRequest request = exchange.getRequest();
+                PublicKey publicKey = getPublicKey(secret);
 
-                String accessToken = null;
-                if (request.getCookies().containsKey("AT")) {
-                    accessToken = Objects.requireNonNull(request.getCookies().getFirst("AT")).getValue();
-                }
-                String refreshToken = null;
-                if (request.getCookies().containsKey("RT")) {
-                    refreshToken = Objects.requireNonNull(request.getCookies().getFirst("RT")).getValue();
-                }
-                Claims claims = getJwtClaim(secret, accessToken);
-                System.out.println("이건 ?");
-                boolean isExpired = claims.getExpiration().compareTo(Timestamp.valueOf(LocalDateTime.now())) <= 0;
+                Claims claims = validateAndProcessToken(
+                        publicKey,
+                        accessToken,
+                        refreshToken,
+                        config.getTokenServiceUrl(),
+                        exchange
+                );
 
-                if (isExpired) {
-                    Map<String, String> tokenMap = requestNewToken(config.getTokenServiceUrl(), accessToken, refreshToken);
-                    Claims newClaims = getJwtClaim(secret, tokenMap.get("AT"));
+                ServerWebExchange serverWebExchange = exchange.mutate()
+                        .request(r -> r.header("X-USER-ID", claims.getSubject()).build())
+                        .build();
 
-                    ServerWebExchange serverWebExchange = exchange.mutate()
-                            .request(r -> r.header("X-USER-ID", newClaims.getSubject())
-                                    .header(HttpHeaders.AUTHORIZATION, tokenMap.get("AT"))
-                                    .build())
-                            .build();
-
-                    serverWebExchange.getResponse().addCookie(ResponseCookie.from("RT", tokenMap.get("RT"))
-                            .path("/")
-                            .httpOnly(true)
-                            .build());
-                    return chain.filter(serverWebExchange);
-                } else {
-                    ServerWebExchange serverWebExchange = exchange.mutate()
-                            .request(r -> r.header("X-USER-ID", claims.getSubject()).build())
-                            .build();
-                    return chain.filter(serverWebExchange);
-                }
+                return chain.filter(serverWebExchange);
             } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
-                e.printStackTrace();
+                log.error("Key parsing error: {}", e.getMessage());
                 throw new TokenException();
+            } catch (Exception e) {
+                log.error("Unexpected error: {}", e.getMessage());
+                response.setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
+                return response.setComplete();
             }
         });
+    }
+
+    private Claims validateAndProcessToken(PublicKey publicKey,
+                                           String accessToken,
+                                           String refreshToken,
+                                           String tokenServiceUrl,
+                                           ServerWebExchange exchange) {
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(publicKey)
+                    .build()
+                    .parseClaimsJws(accessToken)
+                    .getBody();
+
+        } catch (ExpiredJwtException e) {
+            Map<String, String> tokenMap = requestNewToken(tokenServiceUrl, accessToken, refreshToken);
+
+            if (tokenMap == null || !tokenMap.containsKey("AT") || !tokenMap.containsKey("RT")) {
+                log.error("Failed to refresh token");
+                throw new TokenException();
+            }
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(publicKey)
+                    .build()
+                    .parseClaimsJws(tokenMap.get("AT"))
+                    .getBody();
+
+            exchange.getResponse().addCookie(ResponseCookie.from("AT", tokenMap.get("AT"))
+                    .path("/")
+                    .httpOnly(true)
+                    .secure(true)
+                    .build());
+            exchange.getResponse().addCookie(ResponseCookie.from("RT", tokenMap.get("RT"))
+                    .path("/")
+                    .httpOnly(true)
+                    .secure(true)
+                    .build());
+            return claims;
+        }
+    }
+
+    private String extractTokenFromCookie(ServerHttpRequest request, ServerHttpResponse response, String tokenName) {
+        if (!request.getCookies().containsKey(tokenName)) {
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return null;
+        }
+        return request.getCookies().getFirst(tokenName).getValue();
     }
 
     private Map<String, String> requestNewToken(String tokenServiceUrl, String token, String refreshToken) {
@@ -115,25 +158,13 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         return response;
     }
 
-    private Claims getJwtClaim(String secret, String token) throws InvalidKeySpecException, NoSuchAlgorithmException {
-        PublicKey publicKey = getPublicKey(secret);
-        return Jwts.parserBuilder()
-                .setSigningKey(publicKey)
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
-    }
-
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
-        System.out.println("------[#] secretKey : " + secretKey);
         String s = secretKey
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s", "");
 
-
         byte[] decodedKey = Base64.getDecoder().decode(s);
-
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA"); // RSA 또는 EC
         return keyFactory.generatePublic(keySpec);
