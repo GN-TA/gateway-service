@@ -8,32 +8,25 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.web.server.Cookie;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseCookie;
+import org.springframework.http.*;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 import site.iotify.gatewayservice.exception.TokenException;
 
+import java.net.URI;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 @Slf4j
 @Component
@@ -52,6 +45,15 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         super(Config.class);
     }
 
+    /**
+     * 1. 액세스토큰 유효, 리프레시 토큰 유효 => good
+     * 2. 액세스토큰 만료, 리프레시 토큰 유효(토큰 서비스는 레디스에 저장된 리프레시 토큰 확인후 유효시 200)
+     * 3. 액세스토큰 만료, 리프레시 토큰 만료(토큰 서비스는 리프레시 토큰 만료시 401 쿠키지움)
+     * 4. 액세스토큰 만료, 블랙리스트 리프레시 토큰
+     *
+     * @param config
+     * @return
+     */
     @Override
     public GatewayFilter apply(Config config) {
         String secret = config.getSecretKey();
@@ -60,73 +62,74 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
             ServerHttpResponse response = exchange.getResponse();
 
             String accessToken = extractTokenFromCookie(request, response, "AT");
-            if (accessToken == null) return response.setComplete();
             String refreshToken = extractTokenFromCookie(request, response, "RT");
-            if (refreshToken == null) return response.setComplete();
-
-            try {
-                PublicKey publicKey = getPublicKey(secret);
-
-                Claims claims = validateAndProcessToken(
-                        publicKey,
-                        accessToken,
-                        refreshToken,
-                        config.getTokenServiceUrl(),
-                        exchange
-                );
-
-                ServerWebExchange serverWebExchange = exchange.mutate()
-                        .request(r -> r.header("X-USER-ID", claims.getSubject()).build())
-                        .build();
-
-                return chain.filter(serverWebExchange);
-            } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
-                log.error("Key parsing error: {}", e.getMessage());
-                throw new TokenException();
-            } catch (Exception e) {
-                log.error("Unexpected error: {}", e.getMessage());
-                response.setStatusCode(org.springframework.http.HttpStatus.UNAUTHORIZED);
+            if (accessToken == null || refreshToken == null) {
+                response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.setComplete();
             }
+
+            return Mono.fromCallable(() -> getPublicKey(secret))
+                    .flatMap(publicKey -> validateAndProcessToken(publicKey, accessToken, refreshToken, config.tokenServiceUrl, exchange))
+                    .flatMap(claims -> {
+                        ServerWebExchange serverWebExchange = exchange.mutate()
+                                .request(r -> r.header("X-USER-ID", claims.getSubject()))
+                                .build();
+                        return chain.filter(serverWebExchange);
+                    })
+                    .onErrorResume(TokenException.class, e -> {
+                        log.error("asdf" + response.getHeaders().get(HttpHeaders.SET_COOKIE));
+                        return response.setComplete();
+                    });
         });
     }
 
-    private Claims validateAndProcessToken(PublicKey publicKey,
-                                           String accessToken,
-                                           String refreshToken,
-                                           String tokenServiceUrl,
-                                           ServerWebExchange exchange) {
+    // 검증이 필요한 요청들 검증 로직
+    private Mono<Claims> validateAndProcessToken(PublicKey publicKey,
+                                                 String accessToken,
+                                                 String refreshToken,
+                                                 String tokenServiceUrl,
+                                                 ServerWebExchange exchange) {
         try {
-            return Jwts.parserBuilder()
-                    .setSigningKey(publicKey)
-                    .build()
-                    .parseClaimsJws(accessToken)
-                    .getBody();
-
+            System.out.println("액세스 토큰 검증");
+            // 액세스토큰 검증
+            return Mono.just(
+                    Jwts.parserBuilder()
+                            .setSigningKey(publicKey)
+                            .build()
+                            .parseClaimsJws(accessToken)
+                            .getBody()
+            );
+            //액세스 토큰 만료시
         } catch (ExpiredJwtException e) {
-            Map<String, String> tokenMap = requestNewToken(tokenServiceUrl, accessToken, refreshToken);
+            System.out.println("access token 만료됨");
+            return requestNewToken(exchange, tokenServiceUrl, accessToken, refreshToken)
+                    .flatMap(tokenMap -> {
+                        Claims claims = Jwts.parserBuilder()
+                                .setSigningKey(publicKey)
+                                .build()
+                                .parseClaimsJws(tokenMap.get("AT"))
+                                .getBody();
 
-            if (tokenMap == null || !tokenMap.containsKey("AT") || !tokenMap.containsKey("RT")) {
-                log.error("Failed to refresh token");
-                throw new TokenException();
-            }
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(publicKey)
-                    .build()
-                    .parseClaimsJws(tokenMap.get("AT"))
-                    .getBody();
-
-            exchange.getResponse().addCookie(ResponseCookie.from("AT", tokenMap.get("AT"))
-                    .path("/")
-                    .httpOnly(true)
-                    .secure(true)
-                    .build());
-            exchange.getResponse().addCookie(ResponseCookie.from("RT", tokenMap.get("RT"))
-                    .path("/")
-                    .httpOnly(true)
-                    .secure(true)
-                    .build());
-            return claims;
+                        exchange.getResponse().addCookie(
+                                ResponseCookie.from("AT", tokenMap.get("AT"))
+                                        .path("/")
+                                        .httpOnly(true)
+                                        .secure(true)
+                                        .build()
+                        );
+                        exchange.getResponse().addCookie(
+                                ResponseCookie.from("RT", tokenMap.get("RT"))
+                                        .path("/")
+                                        .httpOnly(true)
+                                        .secure(true)
+                                        .build()
+                        );
+                        return Mono.just(claims);
+                    })
+                    .onErrorMap(throwable -> {
+                        log.error("Token refresh failed");
+                        return new TokenException();
+                    });
         }
     }
 
@@ -138,24 +141,50 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
         return request.getCookies().getFirst(tokenName).getValue();
     }
 
-    private Map<String, String> requestNewToken(String tokenServiceUrl, String token, String refreshToken) {
+    private Mono<Map<String, String>> requestNewToken(ServerWebExchange exchange,
+                                                      String tokenServiceUrl,
+                                                      String token,
+                                                      String refreshToken) {
         WebClient webClient = WebClient.builder().build();
-
-        Map<String, String> response = webClient.post()
-                .uri(tokenServiceUrl + "/refresh")
+        return webClient.post()
+                .uri(tokenServiceUrl + "/v1/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", "bearer " + token)
+                .cookie("AT", token)
                 .cookie("RT", refreshToken)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {
-                })
-                .block();
+                .exchangeToMono(clientResponse -> {
+                    HttpStatus status = (HttpStatus) clientResponse.statusCode();
+                    HttpHeaders headers = clientResponse.headers().asHttpHeaders();
 
-        if (response == null || !response.containsKey("newToken")) {
-            throw new TokenException();
-        }
-
-        return response;
+                    log.error("Token service response status: {}", status);
+                    log.error("Token service response headers: {}", headers);
+                    List<String> setCookieHeaders = headers.get(HttpHeaders.SET_COOKIE);
+                    // 리프레시 토큰 유효시
+                    if (status.is2xxSuccessful()) {
+                        return clientResponse.bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {
+                                })
+                                .flatMap(responseBody -> {
+                                    System.out.println("이거보셍요오오" + responseBody);
+                                    if (responseBody == null || !responseBody.containsKey("accessToken") ||
+                                            !responseBody.containsKey("refreshToken")) {
+                                        System.out.println("이거보셍요오오1" + responseBody);
+                                        return Mono.error(new TokenException());
+                                    }
+                                    System.out.println("이거보셍요오오2" + responseBody.get("RT"));
+                                    return Mono.just(responseBody);
+                                });
+                        // 리프레시 토큰 만료시
+                    } else {
+                        // 토큰 서비스에서 받은 Set-Cookie 헤더를 Gateway 응답에 추가
+                        if (setCookieHeaders != null) {
+                            setCookieHeaders.forEach(cookie ->
+                                    exchange.getResponse().getHeaders().add(HttpHeaders.SET_COOKIE, cookie)
+                            );
+                        }
+                        System.out.println("헤더 설정됐나?");
+                        System.out.println(setCookieHeaders);
+                        return Mono.error(new TokenException());
+                    }
+                });
     }
 
     private PublicKey getPublicKey(String secretKey) throws InvalidKeySpecException, NoSuchAlgorithmException {
