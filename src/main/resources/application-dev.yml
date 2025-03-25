@@ -14,6 +14,10 @@ jwt:
       bqRGrgToX3s36oaFZc/rftZ4e9yKvBlCErKLlXrWIEWhq7XloC0tuMZ9proAVZu/
       NQIDAQAB
       -----END PUBLIC KEY-----
+
+service:
+  token-url: http://localhost:8091
+
 spring:
   cloud:
     gateway:
@@ -27,6 +31,7 @@ spring:
             - name: JwtAuthenticationFilter
               args:
                 secretKey: ${jwt.secret.key}
+                tokenServiceUrl: ${service.token-url}
 
         - id: user-service-filter-excluded
           predicates:

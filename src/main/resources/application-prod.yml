@@ -6,6 +6,9 @@ jwt:
   secret:
     key: ${PUBLIC_KEY}
 
+service:
+  token-url: ${TOKEN_URL}
+
 spring:
   cloud:
     gateway:
@@ -19,6 +22,7 @@ spring:
             - name: JwtAuthenticationFilter
               args:
                 secretKey: ${jwt.secret.key}
+                tokenServiceUrl: ${service.token-url}
 
         - id: user-service-filter-excluded
           predicates:
