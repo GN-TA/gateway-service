@@ -110,7 +110,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                         exchange.getResponse().addCookie(
                                 ResponseCookie.from("AT", tokenMap.get("accessToken"))
                                         .path("/")
-                                        .httpOnly(true)
                                         .secure(true)
                                         .build()
                         );
