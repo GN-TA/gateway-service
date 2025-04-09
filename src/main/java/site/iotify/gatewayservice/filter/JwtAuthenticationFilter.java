@@ -63,13 +63,12 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
             ServerHttpResponse response = exchange.getResponse();
 
             String accessToken = extractTokenFromCookie(request, response, "AT");
-            String refreshToken = extractTokenFromCookie(request, response, "RT");
-            if (accessToken == null || refreshToken == null) {
+            if (accessToken == null) {
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.setComplete();
             }
             return Mono.fromCallable(() -> getPublicKey(secret))
-                    .flatMap(publicKey -> validateAndProcessToken(publicKey, accessToken, refreshToken, config.tokenServiceUrl, exchange))
+                    .flatMap(publicKey -> validateAndProcessToken(publicKey, accessToken, config.tokenServiceUrl, exchange))
                     .flatMap(claims -> {
                         ServerWebExchange serverWebExchange = exchange.mutate()
                                 .request(r -> r.header("X-USER-ID", claims))
@@ -77,7 +76,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                         return chain.filter(serverWebExchange);
                     })
                     .onErrorResume(TokenException.class, e -> {
-                        log.error("asdf" + response.getHeaders().get(HttpHeaders.SET_COOKIE));
                         return response.setComplete();
                     });
         });
@@ -86,7 +84,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     // 검증이 필요한 요청들 검증 로직
     private Mono<String> validateAndProcessToken(PublicKey publicKey,
                                                  String accessToken,
-                                                 String refreshToken,
                                                  String tokenServiceUrl,
                                                  ServerWebExchange exchange) {
         try {
@@ -100,7 +97,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
             );
             //액세스 토큰 만료시
         } catch (ExpiredJwtException e) {
-            return requestNewToken(exchange, tokenServiceUrl, accessToken, refreshToken)
+            return requestNewToken(exchange, tokenServiceUrl, accessToken)
                     .flatMap(tokenMap -> {
                         Claims claims = Jwts.parserBuilder()
                                 .setSigningKey(publicKey)
@@ -110,13 +107,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                         exchange.getResponse().addCookie(
                                 ResponseCookie.from("AT", tokenMap.get("accessToken"))
                                         .path("/")
-                                        .secure(true)
-                                        .build()
-                        );
-                        exchange.getResponse().addCookie(
-                                ResponseCookie.from("RT", tokenMap.get("refreshToken"))
-                                        .path("/")
-                                        .httpOnly(true)
                                         .secure(true)
                                         .build()
                         );
@@ -140,14 +130,12 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     private Mono<Map<String, String>> requestNewToken(ServerWebExchange exchange,
                                                       String tokenServiceUrl,
-                                                      String token,
-                                                      String refreshToken) {
+                                                      String token) {
         WebClient webClient = WebClient.builder().build();
         return webClient.post()
                 .uri(tokenServiceUrl + "/v1/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .cookie("AT", token)
-                .cookie("RT", refreshToken)
                 .exchangeToMono(clientResponse -> {
                     HttpStatus status = (HttpStatus) clientResponse.statusCode();
                     HttpHeaders headers = clientResponse.headers().asHttpHeaders();
@@ -160,8 +148,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                         return clientResponse.bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {
                                 })
                                 .flatMap(responseBody -> {
-                                    if (responseBody == null || !responseBody.containsKey("accessToken") ||
-                                            !responseBody.containsKey("refreshToken")) {
+                                    if (responseBody == null || !responseBody.containsKey("accessToken")) {
                                         return Mono.error(new TokenException());
                                     }
                                     return Mono.just(responseBody);
