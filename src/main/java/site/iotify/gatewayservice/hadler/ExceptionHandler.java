@@ -31,6 +31,7 @@ public class ExceptionHandler implements ErrorWebExceptionHandler {
         if (ex instanceof SignatureException ||
                 ex instanceof JwtException ||
                 ex instanceof TokenException) {
+            System.out.println("ExceptionHandler handle() Error : " + ex.getMessage());
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
         } else {
             response.setStatusCode(HttpStatus.NOT_FOUND);
