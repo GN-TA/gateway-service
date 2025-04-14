@@ -64,6 +64,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
             String accessToken = extractTokenFromCookie(request, response, "AT");
             if (accessToken == null) {
+                System.out.println("apply() Error");
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.setComplete();
             }
@@ -122,6 +123,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     private String extractTokenFromCookie(ServerHttpRequest request, ServerHttpResponse response, String tokenName) {
         if (!request.getCookies().containsKey(tokenName)) {
+            System.out.println("extractTokenFromCookie() Error : ");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return null;
         }
