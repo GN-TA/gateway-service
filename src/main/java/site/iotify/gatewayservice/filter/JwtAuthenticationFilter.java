@@ -64,7 +64,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
             String accessToken = extractTokenFromCookie(request, response, "AT");
             if (accessToken == null) {
-                System.out.println("apply() Error");
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.setComplete();
             }
@@ -76,9 +75,7 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                                 .build();
                         return chain.filter(serverWebExchange);
                     })
-                    .onErrorResume(TokenException.class, e -> {
-                        return response.setComplete();
-                    });
+                    .onErrorMap(TokenException.class, e -> e);
         });
     }
 
@@ -123,7 +120,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     private String extractTokenFromCookie(ServerHttpRequest request, ServerHttpResponse response, String tokenName) {
         if (!request.getCookies().containsKey(tokenName)) {
-            System.out.println("extractTokenFromCookie() Error : ");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return null;
         }
@@ -142,8 +138,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     HttpStatus status = (HttpStatus) clientResponse.statusCode();
                     HttpHeaders headers = clientResponse.headers().asHttpHeaders();
 
-                    log.error("Token service response status: {}", status);
-                    log.error("Token service response headers: {}", headers);
                     List<String> setCookieHeaders = headers.get(HttpHeaders.SET_COOKIE);
                     // 리프레시 토큰 유효시
                     if (status.is2xxSuccessful()) {
