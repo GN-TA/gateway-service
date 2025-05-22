@@ -105,7 +105,6 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                         exchange.getResponse().addCookie(
                                 ResponseCookie.from("AT", tokenMap.get("accessToken"))
                                         .path("/")
-                                        .secure(true)
                                         .build()
                         );
                         return Mono.just(claims.getSubject());
